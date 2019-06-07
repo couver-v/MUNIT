@@ -27,12 +27,20 @@ parser.add_argument('--synchronized', action='store_true', help="whether use syn
 parser.add_argument('--output_only', action='store_true', help="whether use synchronized style code or not")
 parser.add_argument('--output_path', type=str, default='.', help="path for logs, checkpoints, and VGG model weight")
 parser.add_argument('--trainer', type=str, default='MUNIT', help="MUNIT|UNIT")
+parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 opts = parser.parse_args()
 
+device = None
+if not opts.disable_cuda and torch.cuda.is_available():
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
 
+print('device: {}'.format(device))
 
 torch.manual_seed(opts.seed)
-torch.cuda.manual_seed(opts.seed)
+if device == "cuda":
+    torch.cuda.manual_seed(opts.seed)
 if not os.path.exists(opts.output_folder):
     os.makedirs(opts.output_folder)
 
@@ -44,9 +52,9 @@ opts.num_style = 1 if opts.style != '' else opts.num_style
 config['vgg_model_path'] = opts.output_path
 if opts.trainer == 'MUNIT':
     style_dim = config['gen']['style_dim']
-    trainer = MUNIT_Trainer(config)
+    trainer = MUNIT_Trainer(config, device)
 elif opts.trainer == 'UNIT':
-    trainer = UNIT_Trainer(config)
+    trainer = UNIT_Trainer(config, device)
 else:
     sys.exit("Only support MUNIT|UNIT")
 
@@ -55,11 +63,11 @@ try:
     trainer.gen_a.load_state_dict(state_dict['a'])
     trainer.gen_b.load_state_dict(state_dict['b'])
 except:
-    state_dict = pytorch03_to_pytorch04(torch.load(opts.checkpoint), opts.trainer)
+    state_dict = pytorch03_to_pytorch04(torch.load(opts.checkpoint, map_location=lambda storage, loc: storage), opts.trainer)
     trainer.gen_a.load_state_dict(state_dict['a'])
     trainer.gen_b.load_state_dict(state_dict['b'])
 
-trainer.cuda()
+trainer.to(device=device)
 trainer.eval()
 encode = trainer.gen_a.encode if opts.a2b else trainer.gen_b.encode # encode function
 style_encode = trainer.gen_b.encode if opts.a2b else trainer.gen_a.encode # encode function
@@ -77,14 +85,14 @@ with torch.no_grad():
     transform = transforms.Compose([transforms.Resize(new_size),
                                     transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    image = Variable(transform(Image.open(opts.input).convert('RGB')).unsqueeze(0).cuda())
-    style_image = Variable(transform(Image.open(opts.style).convert('RGB')).unsqueeze(0).cuda()) if opts.style != '' else None
+    image = Variable(transform(Image.open(opts.input).convert('RGB')).unsqueeze(0).to(device=device))
+    style_image = Variable(transform(Image.open(opts.style).convert('RGB')).unsqueeze(0).to(device=device)) if opts.style != '' else None
 
     # Start testing
     content, _ = encode(image)
 
     if opts.trainer == 'MUNIT':
-        style_rand = Variable(torch.randn(opts.num_style, style_dim, 1, 1).cuda())
+        style_rand = Variable(torch.randn(opts.num_style, style_dim, 1, 1).to(device=device))
         if opts.style != '':
             _, style = style_encode(style_image)
         else:

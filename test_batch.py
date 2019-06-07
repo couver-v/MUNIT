@@ -38,9 +38,17 @@ parser.add_argument('--compute_IS', action='store_true', help="whether to comput
 parser.add_argument('--compute_CIS', action='store_true', help="whether to compute Conditional Inception Score or not")
 parser.add_argument('--inception_a', type=str, default='.', help="path to the pretrained inception network for domain A")
 parser.add_argument('--inception_b', type=str, default='.', help="path to the pretrained inception network for domain B")
+parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 
 opts = parser.parse_args()
 
+device = None
+if not opts.disable_cuda and torch.cuda.is_available():
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
+
+print('device: {}'.format(device))
 
 torch.manual_seed(opts.seed)
 torch.cuda.manual_seed(opts.seed)
@@ -80,7 +88,7 @@ except:
     trainer.gen_a.load_state_dict(state_dict['a'])
     trainer.gen_b.load_state_dict(state_dict['b'])
 
-trainer.cuda()
+trainer.to(device=device)
 trainer.eval()
 encode = trainer.gen_a.encode if opts.a2b else trainer.gen_b.encode # encode function
 decode = trainer.gen_b.decode if opts.a2b else trainer.gen_a.decode # decode function
@@ -93,14 +101,14 @@ if opts.compute_CIS:
 
 if opts.trainer == 'MUNIT':
     # Start testing
-    style_fixed = Variable(torch.randn(opts.num_style, style_dim, 1, 1).cuda(), volatile=True)
+    style_fixed = Variable(torch.randn(opts.num_style, style_dim, 1, 1).to(device=device), volatile=True)
     for i, (images, names) in enumerate(zip(data_loader, image_names)):
         if opts.compute_CIS:
             cur_preds = []
         print(names[1])
-        images = Variable(images.cuda(), volatile=True)
+        images = Variable(images.to(device=device), volatile=True)
         content, _ = encode(images)
-        style = style_fixed if opts.synchronized else Variable(torch.randn(opts.num_style, style_dim, 1, 1).cuda(), volatile=True)
+        style = style_fixed if opts.synchronized else Variable(torch.randn(opts.num_style, style_dim, 1, 1).to(device=device), volatile=True)
         for j in range(opts.num_style):
             s = style[j].unsqueeze(0)
             outputs = decode(content, s)
@@ -142,7 +150,7 @@ elif opts.trainer == 'UNIT':
     # Start testing
     for i, (images, names) in enumerate(zip(data_loader, image_names)):
         print(names[1])
-        images = Variable(images.cuda(), volatile=True)
+        images = Variable(images.to(device=device), volatile=True)
         content, _ = encode(images)
 
         outputs = decode(content)

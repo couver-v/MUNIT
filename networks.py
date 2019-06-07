@@ -17,7 +17,7 @@ except ImportError: # will be 3.x series
 
 class MsImageDis(nn.Module):
     # Multi-scale discriminator architecture
-    def __init__(self, input_dim, params):
+    def __init__(self, input_dim, params, device):
         super(MsImageDis, self).__init__()
         self.n_layer = params['n_layer']
         self.gan_type = params['gan_type']
@@ -29,6 +29,7 @@ class MsImageDis(nn.Module):
         self.input_dim = input_dim
         self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
         self.cnns = nn.ModuleList()
+        self.device = device
         for _ in range(self.num_scales):
             self.cnns.append(self._make_net())
 
@@ -60,8 +61,8 @@ class MsImageDis(nn.Module):
             if self.gan_type == 'lsgan':
                 loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2)
             elif self.gan_type == 'nsgan':
-                all0 = Variable(torch.zeros_like(out0.data).cuda(), requires_grad=False)
-                all1 = Variable(torch.ones_like(out1.data).cuda(), requires_grad=False)
+                all0 = Variable(torch.zeros_like(out0.data).to(device=self.device), requires_grad=False)
+                all1 = Variable(torch.ones_like(out1.data).to(device=self.device), requires_grad=False)
                 loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all0) +
                                    F.binary_cross_entropy(F.sigmoid(out1), all1))
             else:
@@ -76,7 +77,7 @@ class MsImageDis(nn.Module):
             if self.gan_type == 'lsgan':
                 loss += torch.mean((out0 - 1)**2) # LSGAN
             elif self.gan_type == 'nsgan':
-                all1 = Variable(torch.ones_like(out0.data).cuda(), requires_grad=False)
+                all1 = Variable(torch.ones_like(out0.data).to(device=self.device), requires_grad=False)
                 loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all1))
             else:
                 assert 0, "Unsupported GAN type: {}".format(self.gan_type)
@@ -149,8 +150,9 @@ class AdaINGen(nn.Module):
 
 class VAEGen(nn.Module):
     # VAE architecture
-    def __init__(self, input_dim, params):
+    def __init__(self, input_dim, params, device):
         super(VAEGen, self).__init__()
+        self.device = device
         dim = params['dim']
         n_downsample = params['n_downsample']
         n_res = params['n_res']
@@ -165,7 +167,7 @@ class VAEGen(nn.Module):
         # This is a reduced VAE implementation where we assume the outputs are multivariate Gaussian distribution with mean = hiddens and std_dev = all ones.
         hiddens = self.encode(images)
         if self.training == True:
-            noise = Variable(torch.randn(hiddens.size()).cuda(hiddens.data.get_device()))
+            noise = Variable(torch.randn(hiddens.size()).to(device=self.device)) #.cuda(hiddens.data.get_device()))
             images_recon = self.decode(hiddens + noise)
         else:
             images_recon = self.decode(hiddens)
@@ -173,7 +175,7 @@ class VAEGen(nn.Module):
 
     def encode(self, images):
         hiddens = self.enc(images)
-        noise = Variable(torch.randn(hiddens.size()).cuda(hiddens.data.get_device()))
+        noise = Variable(torch.randn(hiddens.size()).to(device=self.device)) #.cuda(hiddens.data.get_device()))
         return hiddens, noise
 
     def decode(self, hiddens):
