@@ -75,6 +75,9 @@ class MUNIT_Trainer(nn.Module):
         # decode (within domain)
         x_a_recon = self.gen_a.decode(c_a, s_a_prime)
         x_b_recon = self.gen_b.decode(c_b, s_b_prime)
+        # decode (within domain sample)
+        x_a_s_recon = self.gen_a.decode(c_a, s_a)
+        x_b_s_recon = self.gen_b.decode(c_b, s_b)
         # decode (cross domain)
         x_ba = self.gen_a.decode(c_b, s_a)
         x_ab = self.gen_b.decode(c_a, s_b)
@@ -97,12 +100,17 @@ class MUNIT_Trainer(nn.Module):
         # GAN loss
         self.loss_gen_adv_a = self.dis_a.calc_gen_loss(x_ba)
         self.loss_gen_adv_b = self.dis_b.calc_gen_loss(x_ab)
+        
+        self.loss_gen_adv_sample_a = self.dis_a.calc_gen_loss(x_a_s_recon)
+        self.loss_gen_adv_sample_b = self.dis_b.calc_gen_loss(x_b_s_recon)
         # domain-invariant perceptual loss
         self.loss_gen_vgg_a = self.compute_vgg_loss(self.vgg, x_ba, x_b) if hyperparameters['vgg_w'] > 0 else 0
         self.loss_gen_vgg_b = self.compute_vgg_loss(self.vgg, x_ab, x_a) if hyperparameters['vgg_w'] > 0 else 0
         # total loss
         self.loss_gen_total = hyperparameters['gan_w'] * self.loss_gen_adv_a + \
                               hyperparameters['gan_w'] * self.loss_gen_adv_b + \
+                              hyperparameters['gan_w'] * self.loss_gen_adv_sample_a + \
+                              hyperparameters['gan_w'] * self.loss_gen_adv_sample_b + \
                               hyperparameters['recon_x_w'] * self.loss_gen_recon_x_a + \
                               hyperparameters['recon_s_w'] * self.loss_gen_recon_s_a + \
                               hyperparameters['recon_c_w'] * self.loss_gen_recon_c_a + \
