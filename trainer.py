@@ -97,6 +97,11 @@ class MUNIT_Trainer(nn.Module):
         self.loss_gen_recon_c_b = self.recon_criterion(c_b_recon, c_b)
         self.loss_gen_cycrecon_x_a = self.recon_criterion(x_aba, x_a) if hyperparameters['recon_x_cyc_w'] > 0 else 0
         self.loss_gen_cycrecon_x_b = self.recon_criterion(x_bab, x_b) if hyperparameters['recon_x_cyc_w'] > 0 else 0
+
+        # reconstruction sample loss
+        self.loss_gen_recon_x_a_s = self.recon_criterion(x_a_s_recon, x_a)
+        self.loss_gen_recon_x_b_s = self.recon_criterion(x_b_s_recon, x_b)
+
         # GAN loss
         self.loss_gen_adv_a = self.dis_a.calc_gen_loss(x_ba)
         self.loss_gen_adv_b = self.dis_b.calc_gen_loss(x_ab)
@@ -117,6 +122,8 @@ class MUNIT_Trainer(nn.Module):
                               hyperparameters['recon_x_w'] * self.loss_gen_recon_x_b + \
                               hyperparameters['recon_s_w'] * self.loss_gen_recon_s_b + \
                               hyperparameters['recon_c_w'] * self.loss_gen_recon_c_b + \
+                              hyperparameters['recon_x_s_w'] * self.loss_gen_recon_x_a_s + \
+                              hyperparameters['recon_x_s_w'] * self.loss_gen_recon_x_b_s + \
                               hyperparameters['recon_x_cyc_w'] * self.loss_gen_cycrecon_x_a + \
                               hyperparameters['recon_x_cyc_w'] * self.loss_gen_cycrecon_x_b + \
                               hyperparameters['vgg_w'] * self.loss_gen_vgg_a + \
