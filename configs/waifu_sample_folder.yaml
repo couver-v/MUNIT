@@ -53,4 +53,4 @@ num_workers: 8                              # number of data loading threads
 new_size: 128                               # first resize the shortest image side to this size
 crop_image_height: 128                      # random crop image of this height
 crop_image_width: 128                       # random crop image of this width
-data_root: ../dics/data/waifu/     # dataset folder location
+data_root: ../dataset    # dataset folder location

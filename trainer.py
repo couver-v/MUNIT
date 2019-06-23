@@ -8,6 +8,8 @@ from torch.autograd import Variable
 import torch
 import torch.nn as nn
 import os
+import numpy as np
+from skimage.filters import gabor_kernel
 
 class MUNIT_Trainer(nn.Module):
     def __init__(self, hyperparameters, device):
@@ -26,6 +28,11 @@ class MUNIT_Trainer(nn.Module):
         display_size = int(hyperparameters['display_size'])
         self.s_a = torch.randn(display_size, self.style_dim, 1, 1).to(device=self.device)
         self.s_b = torch.randn(display_size, self.style_dim, 1, 1).to(device=self.device)
+
+        # Gabor kernel
+        k = np.real(gabor_kernel(0.15, theta = 0.5 * np.pi,sigma_x=5, sigma_y=5))[None, None]
+        k = np.repeat(k, 3, axis=1)
+        self.gabor_kernel = torch.from_numpy(k).to(torch.float)
 
         # Setup the optimizers
         beta1 = hyperparameters['beta1']
@@ -69,6 +76,11 @@ class MUNIT_Trainer(nn.Module):
         self.gen_opt.zero_grad()
         s_a = Variable(torch.randn(x_a.size(0), self.style_dim, 1, 1).to(device=self.device))
         s_b = Variable(torch.randn(x_b.size(0), self.style_dim, 1, 1).to(device=self.device))
+
+        # gabor inputs
+        print(x_a.shape, self.gabor_kernel.shape)
+        gabor_x_a = torch.nn.functional.conv2d(x_a, self.gabor_kernel, bias=None, stride=1, padding=0, dilation=1, groups=1)
+        gabor_x_b = torch.nn.functional.conv2d(x_b, self.gabor_kernel, bias=None, stride=1, padding=0, dilation=1, groups=1)
         # encode
         c_a, s_a_prime = self.gen_a.encode(x_a)
         c_b, s_b_prime = self.gen_b.encode(x_b)
@@ -78,6 +90,9 @@ class MUNIT_Trainer(nn.Module):
         # decode (within domain sample)
         x_a_s_recon = self.gen_a.decode(c_a, s_a)
         x_b_s_recon = self.gen_b.decode(c_b, s_b)
+        # gabor conv on decode (within domain sample)
+        gabor_x_a_s_recon = torch.nn.functional.conv2d(x_a_s_recon, self.gabor_kernel, bias=None, stride=1, padding=0, dilation=1, groups=1)
+        gabor_x_b_s_recon = torch.nn.functional.conv2d(x_b_s_recon, self.gabor_kernel, bias=None, stride=1, padding=0, dilation=1, groups=1)
         # decode (cross domain)
         x_ba = self.gen_a.decode(c_b, s_a)
         x_ab = self.gen_b.decode(c_a, s_b)
@@ -98,9 +113,9 @@ class MUNIT_Trainer(nn.Module):
         self.loss_gen_cycrecon_x_a = self.recon_criterion(x_aba, x_a) if hyperparameters['recon_x_cyc_w'] > 0 else 0
         self.loss_gen_cycrecon_x_b = self.recon_criterion(x_bab, x_b) if hyperparameters['recon_x_cyc_w'] > 0 else 0
 
-        # reconstruction sample loss
-        self.loss_gen_recon_x_a_s = self.recon_criterion(x_a_s_recon, x_a)
-        self.loss_gen_recon_x_b_s = self.recon_criterion(x_b_s_recon, x_b)
+        # reconstruction gabor loss
+        self.loss_gen_recon_x_a_s = self.recon_criterion(gabor_x_a_s_recon, gabor_x_a)
+        self.loss_gen_recon_x_b_s = self.recon_criterion(gabor_x_b_s_recon, gabor_x_b)
 
         # GAN loss
         self.loss_gen_adv_a = self.dis_a.calc_gen_loss(x_ba)

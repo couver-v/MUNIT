@@ -13,10 +13,12 @@ import torch
 import os
 from torchvision import transforms
 from PIL import Image
+import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, help="net configuration")
 parser.add_argument('--input', type=str, help="input image path")
+parser.add_argument('--input-list', type=str, default='', help="input image path")
 parser.add_argument('--output_folder', type=str, help="output image path")
 parser.add_argument('--checkpoint', type=str, help="checkpoint of autoencoders")
 parser.add_argument('--style', type=str, default='', help="style image path")
@@ -81,37 +83,49 @@ else:
     else:
         new_size = config['new_size_b']
 
+input_list = []
+
+if opts.input_list != '':
+    with open(opts.input_list, 'r') as f:
+        for line in f.read().split('\n'):
+           input_list.append(os.path.join(opts.input, line))
+else:
+    input_list.append(opts.input)
+
+
 with torch.no_grad():
     transform = transforms.Compose([transforms.Resize(new_size),
                                     transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    image = Variable(transform(Image.open(opts.input).convert('RGB')).unsqueeze(0).to(device=device))
     style_image = Variable(transform(Image.open(opts.style).convert('RGB')).unsqueeze(0).to(device=device)) if opts.style != '' else None
 
     # Start testing
-    content, _ = encode(image)
+    for i, input in enumerate(input_list):
+        image = Variable(transform(Image.open(input).convert('RGB')).unsqueeze(0).to(device=device))
+        content, _ = encode(image)
 
-    if opts.trainer == 'MUNIT':
-        style_rand = Variable(torch.randn(opts.num_style, style_dim, 1, 1).to(device=device))
-        if opts.style != '':
-            _, style = style_encode(style_image)
-        else:
-            style = style_rand
-        for j in range(opts.num_style):
-            s = style[j].unsqueeze(0)
-            outputs = decode(content, s)
+        if opts.trainer == 'MUNIT':
+            style_rand = Variable(torch.randn(opts.num_style, style_dim, 1, 1).to(device=device))
+            if opts.style != '':
+                _, style = style_encode(style_image)
+            else:
+                style = style_rand
+
+            for j in range(opts.num_style):
+                s = style[j].unsqueeze(0)
+                outputs = decode(content, s)
+                outputs = (outputs + 1) / 2.
+                path = os.path.join(opts.output_folder, '{:03d}-output{:03d}.jpg'.format(i, j))
+                vutils.save_image(outputs.data, path, padding=0, normalize=True)
+        elif opts.trainer == 'UNIT':
+            outputs = decode(content)
             outputs = (outputs + 1) / 2.
-            path = os.path.join(opts.output_folder, 'output{:03d}.jpg'.format(j))
+            path = os.path.join(opts.output_folder, 'output.jpg')
             vutils.save_image(outputs.data, path, padding=0, normalize=True)
-    elif opts.trainer == 'UNIT':
-        outputs = decode(content)
-        outputs = (outputs + 1) / 2.
-        path = os.path.join(opts.output_folder, 'output.jpg')
-        vutils.save_image(outputs.data, path, padding=0, normalize=True)
-    else:
-        pass
+        else:
+            pass
 
-    if not opts.output_only:
-        # also save input images
-        vutils.save_image(image.data, os.path.join(opts.output_folder, 'input.jpg'), padding=0, normalize=True)
+        if not opts.output_only:
+            # also save input images
+            vutils.save_image(image.data, os.path.join(opts.output_folder, '{:03d}-input.jpg'.format(i)), padding=0, normalize=True)
 
